@@ -1,0 +1,39 @@
+
+
+services:
+  peoplecount-db:
+    image: mongo:7
+    container_name: peoplecount_flask-db
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27020:27017"
+    env_file:
+      - .env
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: peoplecount
+    volumes:
+      - peoplecount-db-data:/data/db
+    networks:
+      - peoplecount_flask-net
+
+  nginx:
+    image: nginx:latest
+    container_name: peoplecount_flask-nginx
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - peoplecount-db
+    networks:
+      - peoplecount_flask-net
+
+volumes:
+  peoplecount-db-data:
+
+networks:
+  peoplecount_flask-net:
+    driver: bridge
