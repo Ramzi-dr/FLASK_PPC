@@ -1,4 +1,4 @@
-""" """
+"""
 main.py — Async entry point for the Flask application
 
 This file initializes your Flask app securely and reliably by:
@@ -97,7 +97,19 @@ async def start():
     # Inject DB itself for use in routes (e.g. /stores)
     env_data["db"] = db
 
-    # Create Flask app with those secrets
+    # Convert token expiry values from strings to integers seconds
+    # Provide fallback defaults if missing
+    try:
+        env_data["JWT_ACCESS_TOKEN_EXPIRES"] = int(env_data.get("JWT_ACCESS_TOKEN_EXPIRES_SECONDS", "60"))
+    except ValueError:
+        env_data["JWT_ACCESS_TOKEN_EXPIRES"] = 60
+
+    try:
+        env_data["JWT_REFRESH_TOKEN_EXPIRES"] = int(env_data.get("JWT_REFRESH_TOKEN_EXPIRES_SECONDS", "300"))
+    except ValueError:
+        env_data["JWT_REFRESH_TOKEN_EXPIRES"] = 300
+
+    # Create Flask app with those secrets including expiry times as ints
     app = create_app(env_data)
 
     # Start the web server
@@ -107,4 +119,3 @@ async def start():
 # Only run if script is executed directly (not imported)
 if __name__ == "__main__":
     asyncio.run(start())
- """

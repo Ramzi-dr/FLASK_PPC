@@ -1,32 +1,94 @@
-# Secure Flask API Documentation
+Secure Flask API Documentation
+This Flask API provides secure endpoints for managing stores and users with JWT-based authentication.
+Tokens expire by default after 15 minutes, with a refresh token system to renew access tokens securely.
 
-This Flask API provides secure endpoints for managing stores with JWT-based authentication.  
-Tokens expire after 15 minutes, with a refresh token system to renew access tokens securely.
+Important: Initial Setup (Must Edit to Get App Working)
+Before using the app, you must configure the following environment settings in your MongoDB env collection:
 
----
+json
+Copy
+[
+  {
+    "key": "FLASK_USER",
+    "value": "AdminHS"
+  },
+  {
+    "key": "FLASK_PASSWORD",
+    "value": "<bcrypt hashed admin password>"
+  },
+  {
+    "key": "JWT_SECRET_KEY",
+    "value": "<your_jwt_secret_key>"
+  },
+  {
+    "key": "SUPER_USER",
+    "value": "SuperUser"
+  },
+  {
+    "key": "SUPER_PASSWORD",
+    "value": "<bcrypt hashed super user password>"
+  },
+  {
+    "key": "JWT_ACCESS_TOKEN_EXPIRES_SECONDS",
+    "value": "900"  // Default 900 seconds = 15 minutes, can be changed
+  },
+  {
+    "key": "JWT_REFRESH_TOKEN_EXPIRES_SECONDS",
+    "value": "3600" // Default 3600 seconds = 1 hour, can be changed
+  }
+]
+Note: These secrets include bcrypt hashes for passwords and JWT keys. Do not share these publicly.
 
-## Authentication
+Token Expiry Configuration API
+You can dynamically update the access and refresh token expiry times via the admin API:
 
-### Login - POST `/login`
+Endpoint: POST /admin/set_token_expiry (localhost only)
 
-- **Purpose:** Obtain access and refresh tokens.  
-- **Input:** JSON body:
-```json
+Auth: HTTP Basic Auth with admin credentials (from env variables)
+
+Body: JSON with any of these keys (all optional):
+
+json
+Copy
+{
+  "access_second": 30,
+  "access_minute": 5,
+  "access_hour": 1,
+  "refresh_minute": 10,
+  "refresh_hour": 2,
+  "refresh_day": 1
+}
+Values are added and converted to seconds internally.
+
+Example: { "access_minute": 3, "refresh_hour": 2 } sets access tokens to 3 minutes and refresh tokens to 2 hours.
+
+On success, old tokens are invalidated immediately.
+
+Authentication
+Login - POST /login
+Purpose: Obtain access and refresh tokens.
+
+Input: JSON:
+
+json
+Copy
 {
   "username": "your_username",
   "password": "your_password"
 }
-Success response (200):
+Success (200):
 
-
+json
+Copy
 {
   "access_token": "<jwt_access_token>",
   "refresh_token": "<jwt_refresh_token>",
   "info": "⚠️ Access token valid for 15 minutes. Use refresh token to renew."
 }
-Failure response (401):
+Failure (401):
 
-
+json
+Copy
 {
   "msg": "Invalid credentials"
 }
@@ -35,221 +97,183 @@ Use refresh token in Authorization: Bearer <refresh_token> header.
 
 No body required.
 
-Success response (200):
+Success (200):
 
-
+json
+Copy
 {
   "access_token": "<new_jwt_access_token>"
 }
-Failure response (401): Token expired or invalid.
+Failure (401): Token expired or invalid.
 
 Authorization
 For all protected endpoints, include header:
 
-
+makefile
+Copy
 Authorization: Bearer <access_token>
-Stores API Endpoints
-GET /stores
-Returns a list of all stores.
-
+Users API Endpoints
+POST /users — Create new user
 Requires valid access token.
 
-Example curl:
+JSON body required fields: email, password.
 
-curl -k -X GET https://your-url/stores \
-  -H "Authorization: Bearer <ACCESS_TOKEN>"
-Success response (200):
+Optional: clientID, name, tel, address.
 
-{
-  "stores": [
-    {
-      "name": "STORE A",
-      "clientID": "CLIENT123",
-      "address": "ZURICH",
-      "users": ["TEST@EXAMPLE.COM", "FOO@BAR.CH"],
-      "cameras": []
-    }
-  ]
-}
+Email and strings are normalized to uppercase.
 
-POST /stores
-Create a new store.
-
-Requires valid access token.
-
-JSON body must contain at least name.
-
-
-Example input:
-
-
-{
-  "name": "My Store",
-  "clientID": "client-x",
-  "address": "ZURICH",
-  "users": ["a@x.ch"]
-}
-Rejections:
-
-Missing or duplicate name
-
-users not a list
-
-Invalid email format in users
-
-Including cameras field (must add cameras via separate endpoint)
-
-Success response (201):
-
-{
-  "msg": "✅ Store created (Note: cameras must be added via /cameras endpoint)",
-  "store": {
-    "name": "MY STORE",
-    "clientID": "CLIENT-X",
-    "address": "ZURICH",
-    "users": ["A@X.CH"],
-    "cameras": []
-  }
-}
-
-PUT /stores
-Update existing store fields except users (managed separately).
-
-Requires valid access token.
-
-JSON body must include name (current store name).
-
-Optional: other fields to update (clientID, address, cameras).
-
-All string fields converted to uppercase automatically.
-
-Example input:
-
-{
-  "name": "STORE A",
-  "clientID": "NEWCLIENTID",
-  "address": "NEW ADDRESS"
-}
-Restrictions:
-
-Cannot update users here (use dedicated endpoints).
-
-No adding new fields not in store.
-
-If no changes detected, returns info message.
-
-Success response (200):
-
-{
-  "msg": "✅ Store 'STORE A' updated",
-  "store": {
-    "name": "STORE A",
-    "clientID": "NEWCLIENTID",
-    "address": "NEW ADDRESS",
-    "users": [...],
-    "cameras": [...]
-  }
-}
-
-DELETE /stores
-Delete one or multiple stores by name.
-
-Requires valid access token.
-
-JSON body must include name (string or list of store names) and "force": true to confirm deletion.
-
-Example input (single):
-
-
-{
-  "name": "STORE A",
-  "force": true
-}
-Example input (multiple):
-
-
-{
-  "name": ["STORE A", "STORE B"],
-  "force": true
-}
-Response (200):
-
-Confirms deleted stores.
-
-Lists stores not found (if any).
+Password must be at least 8 chars, with 1 uppercase and 1 digit.
 
 Example:
 
-
+json
+Copy
 {
-  "msg": "✅ Deleted stores: STORE A. ❌ Not found stores: STORE B."
+  "email": "user@example.com",
+  "password": "Pass1234",
+  "clientID": "CLIENT1",
+  "name": "John Doe",
+  "tel": "123456",
+  "address": "Zurich"
 }
+Success response:
 
-- Example Authorization Header
+json
+Copy
+{
+  "msg": "✅ User created",
+  "user": {
+    "email": "USER@EXAMPLE.COM",
+    "clientID": "CLIENT1",
+    "name": "JOHN DOE",
+    "tel": "123456",
+    "address": "ZURICH",
+    "stores": []
+  }
+}
+GET /users — List all users
+Returns users without passwords.
 
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR...
+Requires valid access token.
 
-////////////////////////////////////Example Full Workflow///////////////////////////////
+PUT /users — Update user
+Requires valid access token.
 
+Identify user with current email.
+
+Optional update fields: clientID, name, tel, address, password (requires old_password), new_email.
+
+Updates sync store-user relations on email changes.
+
+DELETE /users — Delete users
+Requires valid access token.
+
+JSON body with "emails" list and "force": true.
+
+Removes users and syncs store lists.
+
+Stores API Endpoints
+GET /stores — List all stores
+Requires valid access token.
+
+POST /stores — Create a new store
+Requires valid access token.
+
+JSON body requires name.
+
+Optional: clientID, address, users (list of emails, must exist).
+
+Cameras initialized empty; managed separately.
+
+PUT /stores — Update a store
+Requires valid access token.
+
+JSON body requires current name.
+
+Update allowed fields except users.
+
+new_name allowed for renaming with sync to users.
+
+DELETE /stores — Delete stores
+Requires valid access token.
+
+JSON body requires name or list and "force": true.
+
+POST /stores/users — Add users to store
+Add one or multiple users by email(s).
+
+Requires valid access token.
+
+Syncs user stores list.
+
+DELETE /stores/users — Remove users from store
+Remove one or multiple users by email(s).
+
+Requires valid access token.
+
+Syncs user stores list.
+
+Super User Endpoint
+PUT /super_user/reset_password
+Hard reset user password using super password.
+
+Requires JWT access token.
+
+JSON body:
+
+json
+Copy
+{
+  "super_password": "SuperSecretPlainText",
+  "email": "user@example.com",
+  "new_password": "NewPass123",
+  "force": true
+}
+Verifies super password (bcrypt hash from env).
+
+Updates user password if valid.
+
+Example Full Workflow
+bash
+Copy
 --Login
-
 curl -X POST https://your-url/login \
 -H "Content-Type: application/json" \
 -d '{"username": "AdminHS", "password": "your_password"}'
 
 --Use access token for protected endpoints
-
 curl -X GET https://your-url/stores \
 -H "Authorization: Bearer <access_token>"
 
 --Refresh access token when expired
-
 curl -X POST https://your-url/refresh \
 -H "Authorization: Bearer <refresh_token>"
 
 --Create a store
-
 curl -X POST https://your-url/stores \
 -H "Authorization: Bearer <access_token>" \
 -H "Content-Type: application/json" \
 -d '{"name": "New Store", "clientID": "client1", "address": "NYC"}'
 
--- Update a store
-
+--Update a store
 curl -X PUT https://your-url/stores \
 -H "Authorization: Bearer <access_token>" \
 -H "Content-Type: application/json" \
 -d '{"name": "New Store", "address": "NEW YORK"}'
 
-
-
--- Delete stores
-
+--Delete stores
 curl -X DELETE https://your-url/stores \
 -H "Authorization: Bearer <access_token>" \
 -H "Content-Type: application/json" \
 -d '{"name": ["NEW STORE"], "force": true}'
-
-
 Notes
-All requests must use HTTPS for security. HTTP is not allowed.
+All requests must use HTTPS for security.
 
-Tokens expire in 15 minutes; always use the refresh token to renew before expiration.
+Tokens expire in 15 minutes by default; always refresh before expiration.
 
-Include the Authorization header with the Bearer token on all protected routes.
+User emails normalized to uppercase and validated.
 
-User emails are normalized to uppercase and validated on creation.
+Cameras managed via separate endpoints (not shown here).
 
-cameras are managed via separate endpoints (not shown here).
-
-Errors include clear messages and appropriate HTTP status codes (400, 401, 404, 409).
-
-How to Use with Postman
-Use POST /login to get access and refresh tokens.
-
-Use the access token in the Authorization: Bearer <access_token> header for all protected endpoints.
-
-Use POST /refresh with the refresh token to get a new access token when needed.
-
-Manage stores using /stores endpoint with GET, POST, PUT, DELETE as above.
+Errors return clear messages with HTTP codes (400, 401, 404, 409).
 

@@ -1,5 +1,9 @@
 # Secure Flask + MongoDB API: Step-by-Step Setup & Tutorial
 gunicorn -w 4 -b 127.0.0.1:5000 wsgi:app
+
+WITH DEBUG 
+gunicorn -w 4 -b 127.0.0.1:5000 wsgi:app --capture-output --log-level debug
+
 ---
 
 ## 1. Prerequisites & Environment Setup

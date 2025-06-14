@@ -20,8 +20,8 @@ def init_store_routes(db):
         - A valid access token
 
     🔐 Example:
-        curl -k -X GET https://your-url/stores \
-        -H "Authorization: Bearer <ACCESS_TOKEN>"
+        curl -k -X GET https://116.203.203.86/stores \
+        -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc0OTg5MTU0MCwianRpIjoiMTUzNGJiYWEtNGU4Mi00ZDM0LTk4ODQtYmE1NWYyMWY0MDE4IiwidHlwZSI6ImFjY2VzcyIsInN1YiI6IkFkbWluSFMiLCJuYmYiOjE3NDk4OTE1NDAsImNzcmYiOiI5OGEzNThiMi0yODkyLTQ3ZjAtYjJhNy0yNmE0YmVhMTljOTkiLCJleHAiOjE3NDk4OTE2MDB9.QI7wmHaBTBzNPW30vKJYboFjCsw6c1cMhBXhtoGvOCs"
     """
     @stores_bp.route("/stores", methods=["GET"])
     @jwt_required()
