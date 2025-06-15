@@ -51,7 +51,6 @@ DEPENDENCIES:
 
 Overall, this app demonstrates best practices for token lifecycle management in JWT-secured Flask APIs, with added flexibility for live configuration of token expiration policies.
 """
-
 import bcrypt
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
@@ -73,19 +72,45 @@ import json
 
 def create_app(env_data):
     app = Flask(__name__)
+    app.debug = True
+
+    @app.before_request
+    def sync_token_expiry():
+        db = env_data["db"]["env"]
+
+        access_doc = db.find_one({"key": "JWT_ACCESS_TOKEN_EXPIRES_SECONDS"})
+        refresh_doc = db.find_one({"key": "JWT_REFRESH_TOKEN_EXPIRES_SECONDS"})
+        cutoff_doc = db.find_one({"key": "TOKEN_ISSUED_AFTER"})
+
+        if access_doc:
+            try:
+                app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(seconds=int(access_doc["value"]))
+            except ValueError:
+                pass
+
+        if refresh_doc:
+            try:
+                app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(seconds=int(refresh_doc["value"]))
+            except ValueError:
+                pass
+
+        if cutoff_doc:
+            try:
+                app.config["TOKEN_ISSUED_AFTER"] = float(cutoff_doc["value"])
+            except ValueError:
+                pass
 
     app.config["JWT_SECRET_KEY"] = env_data["JWT_SECRET_KEY"]
 
-    # Use token expiration seconds from env_data, fallback to defaults
     access_exp_sec = int(env_data.get("JWT_ACCESS_TOKEN_EXPIRES", 60))
     refresh_exp_sec = int(env_data.get("JWT_REFRESH_TOKEN_EXPIRES", 300))
+    print(access_exp_sec)
+    print(refresh_exp_sec)
 
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(seconds=access_exp_sec)
     app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(seconds=refresh_exp_sec)
 
     app.config["JWT_VERIFY_EXPIRATION"] = True
-
-    # Token cutoff to reject tokens issued before this time
     app.config["TOKEN_ISSUED_AFTER"] = datetime.now(tz=timezone.utc).timestamp()
 
     CORS(app)
@@ -184,7 +209,10 @@ def create_app(env_data):
         return jsonify(
             access_token=access_token,
             refresh_token=refresh_token,
-            info=f"⚠️ Access token valid for {app.config['JWT_ACCESS_TOKEN_EXPIRES']}. Use refresh token to renew."
+            info={
+                "access": f"⚠️ Access token valid for {app.config['JWT_ACCESS_TOKEN_EXPIRES']}",
+                "refresh": f"♻️ Refresh token valid for {app.config['JWT_REFRESH_TOKEN_EXPIRES']}"
+            }
         )
 
     @app.route("/refresh", methods=["POST"])
@@ -225,25 +253,6 @@ def create_app(env_data):
         print(f"DEBUG: Access token valid for user {user}")
         return jsonify(msg=f"Hello {user}, access granted")
 
-    @app.route("/admin/set_token_expiry", methods=["POST"])
-    def set_token_expiry():
-        data = request.get_json()
-        access_seconds = data.get("access_seconds")
-        refresh_seconds = data.get("refresh_seconds")
-
-        if access_seconds is not None:
-            app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(seconds=int(access_seconds))
-            print(f"DEBUG: Access token expiry set to {access_seconds} seconds")
-
-        if refresh_seconds is not None:
-            app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(seconds=int(refresh_seconds))
-            print(f"DEBUG: Refresh token expiry set to {refresh_seconds} seconds")
-
-        app.config["TOKEN_ISSUED_AFTER"] = datetime.now(tz=timezone.utc).timestamp()
-        print(f"DEBUG: TOKEN_ISSUED_AFTER updated to {app.config['TOKEN_ISSUED_AFTER']}")
-
-        return jsonify(msg="Token expiry updated and old tokens invalidated")
-
     from routes.stores import stores_bp, init_store_routes
     init_store_routes(env_data["db"])
     app.register_blueprint(stores_bp)
@@ -255,6 +264,14 @@ def create_app(env_data):
     from routes.super_user import super_user_bp, init_super_user_routes
     init_super_user_routes(env_data["db"])
     app.register_blueprint(super_user_bp)
+    
+    from routes.cameras import cameras_bp, init_camera_routes
+    init_camera_routes(env_data["db"])
+    app.register_blueprint(cameras_bp)
+
+    from routes.admin import admin_bp, init_admin_routes
+    init_admin_routes(env_data["db"])
+    app.register_blueprint(admin_bp, url_prefix="/admin")
 
     print("DEBUG: App created and routes registered")
     return app

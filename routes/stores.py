@@ -33,9 +33,25 @@ def init_store_routes(db):
             ordered["clientID"] = doc.get("clientID", "")
             ordered["address"] = doc.get("address", "")
             ordered["users"] = doc.get("users", [])
-            ordered["cameras"] = doc.get("cameras", [])
+
+            converted_cameras = []
+            for cam in doc.get("cameras", []):
+                if isinstance(cam, dict):
+                    cam = cam.copy()
+                    if "_id" in cam:
+                        cam["_id"] = str(cam["_id"])
+                    if "name" not in cam:
+                        cam["name"] = ""  # fallback for older entries
+                    converted_cameras.append(cam)
+                else:
+                    converted_cameras.append(cam)
+
+            ordered["cameras"] = converted_cameras
             stores.append(ordered)
+
         return Response(json.dumps({"stores": stores}), mimetype="application/json")
+
+
 
     # -----------------------------------------
     # ➕ POST /stores — Create a new store

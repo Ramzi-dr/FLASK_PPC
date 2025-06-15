@@ -1,37 +1,47 @@
 # wsgi.py — WSGI entry point for Gunicorn production server
 # Usage example: gunicorn -w 4 -b 127.0.0.1:5000 wsgi:app
 
-from dotenv import load_dotenv
 import os
 from urllib.parse import quote_plus
+from pymongo import MongoClient, errors
+from dotenv import load_dotenv
 from app import create_app
 
-# Load environment variables from .env file
+# Load .env file
 load_dotenv()
 
+# Get MongoDB credentials
 user_raw = os.getenv("MONGO_INITDB_ROOT_USERNAME")
 pwd_raw = os.getenv("MONGO_INITDB_ROOT_PASSWORD")
 
-if user_raw is None or pwd_raw is None:
-    raise RuntimeError("Missing MongoDB credentials in environment variables")
+if not user_raw or not pwd_raw:
+    raise RuntimeError("Missing MongoDB credentials")
 
 user = quote_plus(user_raw)
 pwd = quote_plus(pwd_raw)
 
-# Build MongoDB URI
 mongo_uri = f"mongodb://{user}:{pwd}@localhost:27020/?authSource=admin"
 
-# Import pymongo here to avoid import errors before loading env
-from pymongo import MongoClient
+# Retry logic like in main.py (sync version)
+def wait_for_mongo(uri, retries=5, delay=2):
+    for _ in range(retries):
+        try:
+            client = MongoClient(uri, serverSelectionTimeoutMS=2000)
+            client.admin.command("ping")
+            return client
+        except errors.ServerSelectionTimeoutError:
+            import time
+            time.sleep(delay)
+    raise Exception("MongoDB not available")
 
-client = MongoClient(mongo_uri)
+client = wait_for_mongo(mongo_uri)
 db = client["peoplecount"]
 
-# Load secrets from env collection as a dict
+# Load secrets
 env_docs = db.env.find({})
 env_data = {doc["key"]: doc["value"] for doc in env_docs}
 
-# Convert token expiry strings to int seconds with fallback defaults
+# Convert token expiry values to int
 try:
     env_data["JWT_ACCESS_TOKEN_EXPIRES"] = int(env_data.get("JWT_ACCESS_TOKEN_EXPIRES_SECONDS", "60"))
 except ValueError:
@@ -42,8 +52,8 @@ try:
 except ValueError:
     env_data["JWT_REFRESH_TOKEN_EXPIRES"] = 300
 
-# Inject DB object
+# Add DB reference
 env_data["db"] = db
 
-# Create Flask app with loaded environment and expirations
+# Create Flask app
 app = create_app(env_data)

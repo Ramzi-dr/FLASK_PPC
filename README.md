@@ -63,6 +63,10 @@ Values are added and converted to seconds internally.
 Example: { "access_minute": 3, "refresh_hour": 2 } sets access tokens to 3 minutes and refresh tokens to 2 hours.
 
 On success, old tokens are invalidated immediately.
+curl -u AdminHS:Security@......! -X POST http://127.0.0.1:5000/admin/set_token_expiry \
+  -H "Content-Type: application/json" \
+  -d '{"access_minute":40,"refresh_hour":12}' 
+  
 
 Authentication
 Login - POST /login

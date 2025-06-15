@@ -28,6 +28,13 @@ from datetime import datetime, timezone, timedelta
 import bcrypt
 
 admin_bp = Blueprint("admin", __name__)
+env_collection = None  # will be initialized from main app
+
+
+def init_admin_routes(db):
+    global env_collection
+    env_collection = db["env"]
+
 
 def basic_auth_required(fn):
     @wraps(fn)
@@ -35,16 +42,24 @@ def basic_auth_required(fn):
         auth = request.authorization
         if not auth or not auth.username or not auth.password:
             return jsonify(msg="❌ Missing or invalid authentication"), 401, {"WWW-Authenticate": 'Basic realm="Login required"'}
-        
-        admin_user = current_app.config.get("ADMIN_USER")
-        admin_pw_hash = current_app.config.get("ADMIN_PASSWORD_HASH")
-        
-        if auth.username != admin_user:
+
+        # Fetch admin credentials directly from env collection
+        user_doc = env_collection.find_one({"key": "FLASK_USER"})
+        pw_doc = env_collection.find_one({"key": "FLASK_PASSWORD"})
+
+        if not user_doc or not pw_doc:
+            return jsonify(msg="❌ Admin credentials not found in database"), 500
+
+        if auth.username != user_doc["value"]:
             return jsonify(msg="❌ Invalid username or password"), 403
-        if not bcrypt.checkpw(auth.password.encode(), admin_pw_hash.encode()):
+
+        if not bcrypt.checkpw(auth.password.encode(), pw_doc["value"].encode()):
             return jsonify(msg="❌ Invalid username or password"), 403
+
         return fn(*args, **kwargs)
     return wrapper
+
+
 
 def local_only(fn):
     @wraps(fn)
@@ -53,6 +68,7 @@ def local_only(fn):
             return jsonify(msg="❌ You are using a remote machine and this is only allowed from localhost"), 403
         return fn(*args, **kwargs)
     return wrapper
+
 
 def time_to_seconds(data, prefix):
     """
@@ -81,6 +97,7 @@ def time_to_seconds(data, prefix):
                 return None  # invalid int conversion
     return total if found else None
 
+
 @admin_bp.route("/set_token_expiry", methods=["POST"])
 @basic_auth_required
 @local_only
@@ -95,8 +112,17 @@ def set_token_expiry():
 
     if access_seconds is not None:
         current_app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(seconds=access_seconds)
+        env_collection.update_one(
+            {"key": "JWT_ACCESS_TOKEN_EXPIRES_SECONDS"},
+            {"$set": {"value": str(access_seconds)}}
+        )
+
     if refresh_seconds is not None:
         current_app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(seconds=refresh_seconds)
+        env_collection.update_one(
+            {"key": "JWT_REFRESH_TOKEN_EXPIRES_SECONDS"},
+            {"$set": {"value": str(refresh_seconds)}}
+        )
 
     current_app.config["TOKEN_ISSUED_AFTER"] = datetime.now(tz=timezone.utc).timestamp()
 
