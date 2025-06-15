@@ -1,7 +1,7 @@
 import DigestFetch from "digest-fetch";
 import { parseStringPromise } from "xml2js";
 
-const client = new DigestFetch("admin", "2008-TheNuance");
+const client = new DigestFetch("admn", "2008-nce");
 const url =
   "http://10.8.1.101/ISAPI/System/Video/inputs/channels/1/counting/search";
 
