@@ -1,0 +1,8 @@
+
+services:
+  flask-app:
+    build:
+      context: .
+    image: homesecurityag/flask_ppc:latest
+    container_name: flask_ppc
+

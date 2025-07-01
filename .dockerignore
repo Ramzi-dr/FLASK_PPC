@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+flask_env/
+*.env
+*.log
+log/
+.DS_Store
+*.sqlite3
+nginx/
