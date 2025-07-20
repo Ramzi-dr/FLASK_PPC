@@ -1,5 +1,4 @@
-import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pytz
 import asyncio
 from pathlib import Path
@@ -10,6 +9,7 @@ try:
 except ImportError:
     notify_HS = None  # Safe fallback if notify is missing
 
+
 class DailyLogger:
     def __init__(self):
         self.timezone = pytz.timezone("Europe/Zurich")
@@ -17,6 +17,7 @@ class DailyLogger:
         self.log_dir = self.base_dir / "log"
         self.startup_notified = False
         self._ensure_log_dir()
+        self._message_cache = {}  # {message: last_sent_time}
 
     def _ensure_log_dir(self):
         try:
@@ -54,7 +55,6 @@ class DailyLogger:
 
     def info(self, message):
         self.log("info", message)
-    
 
     def warning(self, message):
         self.log("warning", message)
@@ -71,6 +71,12 @@ class DailyLogger:
     def _notify_async(self, message):
         if notify_HS is None:
             return
+        now = self._now()
+        # check cache
+        last_time = self._message_cache.get(message)
+        if last_time and (now - last_time) < timedelta(minutes=30):
+            return  # skip duplicate
+        self._message_cache[message] = now
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(notify_HS(message, self))
@@ -84,7 +90,7 @@ class DailyLogger:
         try:
             files = sorted(
                 [f for f in self.log_dir.glob("*.log") if f.is_file()],
-                key=lambda x: x.stat().st_mtime
+                key=lambda x: x.stat().st_mtime,
             )
             while len(files) > limit:
                 files.pop(0).unlink(missing_ok=True)
@@ -94,7 +100,9 @@ class DailyLogger:
     async def get_wan_ip(self):
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get("https://api.ipify.org?format=text", timeout=5) as resp:
+                async with session.get(
+                    "https://api.ipify.org?format=text", timeout=5
+                ) as resp:
                     return await resp.text()
         except Exception:
             return "unknown"
@@ -110,5 +118,6 @@ class DailyLogger:
             self.startup_notified = True
         except Exception:
             pass
+
 
 logger = DailyLogger()

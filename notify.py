@@ -20,11 +20,13 @@ RETRY_BASE_DELAY = 2  # seconds
 # Flag to track if notify_HS was called for the first time
 _first_time_called = True
 
+
 async def notify_HS(message, logger=None):
     """
     Sends a notification via external service using Microsoft email account.
     Includes robust retry logic for connection errors.
     Waits 2 seconds only on the first call.
+    Never raises unhandled errors if hs_notifier is unavailable.
     """
     global _first_time_called
     if _first_time_called:
@@ -37,7 +39,9 @@ async def notify_HS(message, logger=None):
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 login_payload = {"username": AUTH_USER, "password": AUTH_PASS}
                 try:
-                    async with session.post(NOTIFY_LOGIN_URL, json=login_payload, ssl=False) as resp:
+                    async with session.post(
+                        NOTIFY_LOGIN_URL, json=login_payload, ssl=False
+                    ) as resp:
                         if resp.status != 200:
                             raise Exception(f"Login failed HTTP {resp.status}")
                         data = await resp.json()
@@ -57,10 +61,14 @@ async def notify_HS(message, logger=None):
                     "message": message,
                 }
                 try:
-                    async with session.post(NOTIFY_URL, json=payload, headers=headers, ssl=False) as resp:
+                    async with session.post(
+                        NOTIFY_URL, json=payload, headers=headers, ssl=False
+                    ) as resp:
                         res_data = await resp.json()
                         if resp.status != 200:
-                            raise Exception(f"Notify failed: {resp.status} → {res_data}")
+                            raise Exception(
+                                f"Notify failed: {resp.status} → {res_data}"
+                            )
                         if logger:
                             logger.info(f"✅ Notification sent: {res_data}")
                     return  # success
@@ -74,4 +82,5 @@ async def notify_HS(message, logger=None):
                 await asyncio.sleep(RETRY_BASE_DELAY * attempt)
             else:
                 if logger:
-                    logger.error("❌ All retries failed")
+                    logger.warning("⚠️ hs_notifier unavailable, giving up after retries")
+                return  # fail silently after retries

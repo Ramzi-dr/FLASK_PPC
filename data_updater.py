@@ -75,14 +75,14 @@ class DataUpdater:
             return []
 
         if not res.text.strip():
-            logger.warning(f"⚠️ Empty XML response from {self.url}")
+            logger.warning(f"⚠️ Empty XML response from {self.url}, likely transient")
             return []
 
         try:
             data = xmltodict.parse(res.text)
         except Exception as e:
             logger.warning(f"⚠️ XML parse error from {self.url}: {e}")
-            logger.debug(f"Raw response: {res.text!r}")
+            logger.info(f"ℹ️ Raw response: {res.text!r}")
             return []
 
         result = data.get("CountingStatisticsResult", {})
@@ -156,6 +156,3 @@ def update_all_cameras():
 
     except Exception as e:
         logger.critical(f"❌ Could not connect or run update_all_cameras: {repr(e)}")
-
-
-
