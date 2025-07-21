@@ -16,13 +16,17 @@ import aiohttp
 # Load .env from 2 levels up (project root)
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
+
 async def get_wan_ip():
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get("https://api.ipify.org?format=text", timeout=5) as resp:
+            async with session.get(
+                "https://api.ipify.org?format=text", timeout=5
+            ) as resp:
                 return await resp.text()
     except:
         return "unknown"
+
 
 async def wait_for_mongo(uri, retries=5, delay=2):
     for i in range(retries):
@@ -37,25 +41,33 @@ async def wait_for_mongo(uri, retries=5, delay=2):
     logger.critical("❌ MongoDB not reachable after multiple attempts.")
     raise Exception("MongoDB not available")
 
+
 async def periodic_store_update():
-    await asyncio.sleep(300)  # wait 5min after first manual update
+    await asyncio.sleep(1800)  # wait 30min after first manual update
+
     while True:
         try:
             await update_open_stores_cameras()
         except Exception as e:
             logger.error(f"❌ Background update failed: {repr(e)}")
-        await asyncio.sleep(300)
+        await asyncio.sleep(1800)  # wait 30min between periodic updates
+
 
 async def run_flask(app):
     try:
-        await asyncio.to_thread(app.run, host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+        await asyncio.to_thread(
+            app.run, host="0.0.0.0", port=5000, debug=False, use_reloader=False
+        )
     except Exception as e:
         logger.critical(f"❌ Flask crashed: {repr(e)}")
         try:
             wan_ip = await get_wan_ip()
-            await notify_HS(f"❌ Flask crashed:\n{repr(e)}\n🌐 WAN IP: {wan_ip}", logger)
+            await notify_HS(
+                f"❌ Flask crashed:\n{repr(e)}\n🌐 WAN IP: {wan_ip}", logger
+            )
         except Exception as notify_err:
             logger.error(f"❌ Failed to notify: {notify_err}")
+
 
 async def main():
     try:
@@ -72,13 +84,17 @@ async def main():
         env_data["db"] = db
 
         try:
-            env_data["JWT_ACCESS_TOKEN_EXPIRES"] = int(env_data.get("JWT_ACCESS_TOKEN_EXPIRES_SECONDS", "60"))
+            env_data["JWT_ACCESS_TOKEN_EXPIRES"] = int(
+                env_data.get("JWT_ACCESS_TOKEN_EXPIRES_SECONDS", "60")
+            )
         except ValueError:
             env_data["JWT_ACCESS_TOKEN_EXPIRES"] = 60
             logger.warning("⚠️ Invalid JWT_ACCESS_TOKEN_EXPIRES_SECONDS, using 60.")
 
         try:
-            env_data["JWT_REFRESH_TOKEN_EXPIRES"] = int(env_data.get("JWT_REFRESH_TOKEN_EXPIRES_SECONDS", "300"))
+            env_data["JWT_REFRESH_TOKEN_EXPIRES"] = int(
+                env_data.get("JWT_REFRESH_TOKEN_EXPIRES_SECONDS", "300")
+            )
         except ValueError:
             env_data["JWT_REFRESH_TOKEN_EXPIRES"] = 300
             logger.warning("⚠️ Invalid JWT_REFRESH_TOKEN_EXPIRES_SECONDS, using 300.")
@@ -100,10 +116,13 @@ async def main():
         logger.critical(f"❌ App startup failed: {repr(e)}")
         try:
             wan_ip = await get_wan_ip()
-            await notify_HS(f"❌ Startup failed: {repr(e)}\n🌐 WAN IP: {wan_ip}", logger)
+            await notify_HS(
+                f"❌ Startup failed: {repr(e)}\n🌐 WAN IP: {wan_ip}", logger
+            )
         except Exception as notify_err:
             logger.error(f"❌ Failed to notify: {notify_err}")
         raise
+
 
 if __name__ == "__main__":
     try:
