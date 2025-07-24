@@ -1,7 +1,5 @@
-""" routes/users.py """
-
 from flask import Blueprint, request, jsonify, Response
-from flask_jwt_extended import jwt_required, create_access_token
+from flask_jwt_extended import jwt_required, get_jwt
 from collections import OrderedDict
 import re
 import json
@@ -10,49 +8,20 @@ from logger import logger
 
 users_bp = Blueprint("users", __name__)
 
-# Email regex with German letters
 email_regex = re.compile(
     r"^[A-Z0-9._%+\-äöüßÄÖÜ]+@[A-Z0-9.\-äöüßÄÖÜ]+\.[A-Z]{2,}$", re.IGNORECASE
 )
 
-# Password regex: min 8 chars, at least 1 uppercase and 1 digit
 password_regex = re.compile(r"^(?=.*[A-Z])(?=.*\d).{8,}$")
 
 
 def init_user_routes(db):
-    @users_bp.route("/login", methods=["POST"])
-    def login():
-        try:
-            data = request.get_json()
-            if not data or not isinstance(data, dict):
-                return jsonify(msg="❌ Body cannot be empty"), 400
-
-            email = data.get("email", "").strip().upper()
-            password = data.get("password", "")
-
-            if not email or not password:
-                return jsonify(msg="❌ 'email' and 'password' required"), 400
-
-            user = db.users.find_one({"email": email})
-            if not user:
-                logger.warning(f"LOGIN failed: no such user {email}")
-                return jsonify(msg="❌ Invalid credentials"), 401
-
-            if not check_password_hash(user["password"], password):
-                logger.warning(f"LOGIN failed: wrong password for {email}")
-                return jsonify(msg="❌ Invalid credentials"), 401
-
-            token = create_access_token(identity=email)
-            logger.info(f"LOGIN success for {email}")
-            return jsonify(access_token=token), 200
-
-        except Exception as e:
-            logger.critical(f"LOGIN error: {e}")
-            return jsonify(msg="❌ Internal server error"), 500
-
     @users_bp.route("/users", methods=["POST"])
     @jwt_required()
     def create_user():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict):
@@ -96,17 +65,16 @@ def init_user_routes(db):
                     raise ValueError(f"Field '{key}' too long (max 20 chars)")
                 return val
 
-            try:
-                clientID = clean_field("clientID")
-                name = clean_field("name")
-                tel = clean_field("tel")
-                address = clean_field("address")
-            except ValueError as ve:
-                return jsonify(msg=f"❌ {ve}"), 400
+            clientID = clean_field("clientID")
+            name = clean_field("name")
+            tel = clean_field("tel")
+            address = clean_field("address")
 
-            if tel:
-                if not tel.isdigit() or len(tel) < 8:
-                    return jsonify(msg="❌ 'tel' must be digits and at least 8 characters"), 400
+            if tel and (not tel.isdigit() or len(tel) < 8):
+                return (
+                    jsonify(msg="❌ 'tel' must be digits and at least 8 characters"),
+                    400,
+                )
 
             hashed_pw = generate_password_hash(password)
 
@@ -141,6 +109,7 @@ def init_user_routes(db):
                 ),
                 201,
             )
+
         except Exception as e:
             logger.critical(f"POST /users error: {e}")
             return jsonify(msg="❌ Internal server error"), 500
@@ -148,6 +117,9 @@ def init_user_routes(db):
     @users_bp.route("/users", methods=["GET"])
     @jwt_required()
     def get_users():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             users = []
             for doc in db.users.find({}, {"_id": 0, "password": 0}):
@@ -193,26 +165,44 @@ def init_user_routes(db):
                     continue
                 if isinstance(value, str) and len(value) > 20:
                     return jsonify(msg=f"❌ Field '{k}' too long (max 20 chars)"), 400
-                if k == "tel":
-                    if not str(value).isdigit() or len(str(value)) < 8:
-                        return jsonify(msg="❌ 'tel' must be digits and at least 8 characters"), 400
+                if k == "tel" and (not str(value).isdigit() or len(str(value)) < 8):
+                    return (
+                        jsonify(
+                            msg="❌ 'tel' must be digits and at least 8 characters"
+                        ),
+                        400,
+                    )
                 if k == "password":
                     old_pw = data.get("old_password")
-                    if not old_pw or not check_password_hash(user.get("password", ""), old_pw):
+                    if not old_pw or not check_password_hash(
+                        user.get("password", ""), old_pw
+                    ):
                         return jsonify(msg="❌ Invalid or missing 'old_password'"), 400
                     if not password_regex.match(value):
-                        return jsonify(msg="❌ Password must be at least 8 chars, with 1 uppercase and 1 number"), 400
+                        return (
+                            jsonify(
+                                msg="❌ Password must be at least 8 chars, with 1 uppercase and 1 number"
+                            ),
+                            400,
+                        )
                     update_fields["password"] = generate_password_hash(value)
                 elif k == "new_email":
                     new_email = value.strip().upper()
                     if not email_regex.match(new_email):
                         return jsonify(msg="❌ Invalid new email format"), 400
                     if db.users.find_one({"email": new_email}):
-                        return jsonify(msg=f"❌ Email '{new_email}' already exists"), 409
+                        return (
+                            jsonify(msg=f"❌ Email '{new_email}' already exists"),
+                            409,
+                        )
                     update_fields["email"] = new_email
-                    db.stores.update_many({"users": email}, {"$set": {"users.$": new_email}})
+                    db.stores.update_many(
+                        {"users": email}, {"$set": {"users.$": new_email}}
+                    )
                 else:
-                    update_fields[k] = value.strip().upper() if isinstance(value, str) else value
+                    update_fields[k] = (
+                        value.strip().upper() if isinstance(value, str) else value
+                    )
 
             if not update_fields:
                 return jsonify(msg="ℹ️ No changes provided"), 200
@@ -231,6 +221,9 @@ def init_user_routes(db):
     @users_bp.route("/users", methods=["DELETE"])
     @jwt_required()
     def delete_users():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict):
@@ -248,7 +241,10 @@ def init_user_routes(db):
                 return jsonify(msg="❌ No valid emails provided"), 400
 
             if not data.get("force"):
-                return jsonify(msg="❌ You must confirm deletion with 'force': true"), 400
+                return (
+                    jsonify(msg="❌ You must confirm deletion with 'force': true"),
+                    400,
+                )
 
             deleted = []
             not_found = []
