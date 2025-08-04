@@ -1,9 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, create_refresh_token
 from werkzeug.security import check_password_hash
 from datetime import datetime, timedelta
 from pytz import timezone
 from logger import logger
+import threading
 from notify import notify_HS
 import random
 import string
@@ -12,7 +13,6 @@ import asyncio
 user_login_bp = Blueprint("user_login", __name__)
 tz_ch = timezone("Europe/Zurich")
 
-# Used collection: db.pincodes
 
 def init_user_login_routes(db):
     @user_login_bp.route("/user_login", methods=["POST"])
@@ -37,20 +37,30 @@ def init_user_login_routes(db):
                 logger.warning(f"USER_LOGIN failed: wrong password for {email}")
                 return jsonify(msg="❌ Invalid credentials"), 401
 
-            # Generate 6-digit random pincode
-            pincode = ''.join(random.choices(string.digits, k=6))
+            pincode = "".join(random.choices(string.digits, k=6))
             created_at = datetime.now(tz_ch)
 
-            db.pincodes.delete_many({"email": email})  # clear old ones
-            db.pincodes.insert_one({
-                "email": email,
-                "pincode": pincode,
-                "created_at": created_at
-            })
+            db.pincodes.delete_many({"email": email})
+            db.pincodes.insert_one(
+                {
+                    "email": email,
+                    "pincode": pincode,
+                    "created_at": created_at.isoformat(),
+                }
+            )
 
             msg = f"🔐 Your login pincode is:\n\n<b>{pincode}</b>\n\n⏱️ Valid 5 minutes only."
-            asyncio.create_task(notify_HS(msg, logger))
             logger.info(f"✅ Pincode sent to {email}")
+
+            try:
+
+                threading.Thread(
+                    target=asyncio.run, args=(notify_HS(msg, logger, email),)
+                ).start()
+
+            except Exception as e:
+                logger.warning(f"⚠️ Notify error: {e}")
+
             return jsonify(msg="✅ Pincode sent via email"), 200
 
         except Exception as e:
@@ -81,27 +91,37 @@ def init_user_login_routes(db):
             if isinstance(created_at, str):
                 created_at = datetime.fromisoformat(created_at)
 
+            if created_at.tzinfo is None:
+                created_at = tz_ch.localize(created_at)
+
             if now - created_at > timedelta(minutes=5):
                 db.pincodes.delete_many({"email": email})
                 logger.warning(f"PINCODE expired for {email}")
                 return jsonify(msg="❌ Pincode expired"), 401
 
-            # Success: delete and issue tokens
             db.pincodes.delete_many({"email": email})
-            access_token = create_access_token(identity=email, additional_claims={"role": "user"})
-            refresh_token = create_refresh_token(identity=email, additional_claims={"role": "user"})
+            access_token = create_access_token(
+                identity=email, additional_claims={"role": "user"}
+            )
+            refresh_token = create_refresh_token(
+                identity=email, additional_claims={"role": "user"}
+            )
+
+            access_expiry = current_app.config["JWT_ACCESS_TOKEN_EXPIRES"]
+            refresh_expiry = current_app.config["JWT_REFRESH_TOKEN_EXPIRES"]
 
             logger.info(f"✅ Pincode OK: tokens issued for {email}")
 
-            return jsonify(
-                msg="✅ Pincode verified",
-                access_token=access_token,
-                refresh_token=refresh_token,
-                info={
-                    "access": "⚠️ Access token valid",
-                    "refresh": "♻️ Refresh token valid"
-                }
-            ), 200
+            return (
+                jsonify(
+                    msg="✅ Pincode verified",
+                    access_token=access_token,
+                    refresh_token=refresh_token,
+                    access_expires_in=int(access_expiry.total_seconds()),
+                    refresh_expires_in=int(refresh_expiry.total_seconds()),
+                ),
+                200,
+            )
 
         except Exception as e:
             logger.critical(f"/verify_pincode error: {e}")

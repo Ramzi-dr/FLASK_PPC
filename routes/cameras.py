@@ -251,3 +251,164 @@ def init_camera_routes(db):
         except Exception as e:
             logger.critical(f"DELETE /cameras failed: {e}")
             return jsonify(msg="❌ Internal server error"), 500
+        
+    # ---------- Store management ----------
+
+    @cameras_bp.route("/cameras/add_store", methods=["POST"])
+    @jwt_required()
+    def add_store_to_camera():
+        try:
+            data = request.get_json()
+            if not data or not isinstance(data, dict):
+                return jsonify(msg="❌ Body cannot be empty"), 400
+
+            cam_url = data.get("url", "").strip().upper()
+            cam_name = data.get("name", "").strip().upper()
+            stores = data.get("store") or data.get("stores")
+
+            if not cam_url and not cam_name:
+                return jsonify(msg="❌ 'url' or 'name' of the camera is required"), 400
+            if not stores:
+                return jsonify(msg="❌ 'store' or 'stores' is required"), 400
+
+            store_list = (
+                [stores.strip().upper()]
+                if isinstance(stores, str)
+                else [s.strip().upper() for s in stores if isinstance(s, str) and s.strip()]
+            )
+
+            if not store_list:
+                return jsonify(msg="❌ Invalid 'stores' list"), 400
+
+            cam_doc = None
+            if cam_url:
+                cam_doc = db.cameras.find_one({"url": cam_url})
+            elif cam_name:
+                matches = list(db.cameras.find({"name": cam_name}))
+                if len(matches) > 1:
+                    return jsonify(msg="❌ Multiple cameras found by name. Use 'url' instead."), 400
+                elif matches:
+                    cam_doc = matches[0]
+
+            if not cam_doc:
+                return jsonify(msg="❌ Camera not found"), 404
+
+            updated_count = 0
+            already_linked = []
+            not_found = []
+
+            for store in store_list:
+                store_doc = db.stores.find_one({"name": store})
+                if not store_doc:
+                    not_found.append(store)
+                    continue
+
+                result1 = db.cameras.update_one(
+                    {"_id": cam_doc["_id"]}, {"$addToSet": {"stores": store}}
+                )
+
+                result2 = db.stores.update_one(
+                    {"name": store},
+                    {
+                        "$addToSet": {
+                            "cameras": {
+                                "_id": cam_doc["_id"],
+                                "url": cam_doc["url"],
+                                "name": cam_doc.get("name", ""),
+                            }
+                        }
+                    },
+                )
+
+                if result1.modified_count or result2.modified_count:
+                    updated_count += 1
+                else:
+                    already_linked.append(store)
+
+            # Refresh cam_doc after update
+            cam_doc = db.cameras.find_one({"_id": cam_doc["_id"]})
+
+            msg_parts = []
+            if updated_count:
+                msg_parts.append(f"✅ Linked stores: {updated_count}")
+            if already_linked:
+                msg_parts.append(f"ℹ️ Already linked: {', '.join(already_linked)}")
+            if not_found:
+                msg_parts.append(f"❌ Stores not found: {', '.join(not_found)}")
+
+            logger.info(f"Linked stores to camera: {cam_doc['url']} → {cam_doc.get('stores', [])}")
+            return jsonify(msg=". ".join(msg_parts), stores=cam_doc.get("stores", [])), 200
+        except Exception as e:
+            logger.critical(f"POST /cameras/add_store failed: {e}")
+            return jsonify(msg="❌ Internal server error"), 500
+
+
+    @cameras_bp.route("/cameras/remove_store", methods=["POST"])
+    @jwt_required()
+    def remove_store_from_camera():
+        try:
+            data = request.get_json()
+            if not data or not isinstance(data, dict):
+                return jsonify(msg="❌ Body cannot be empty"), 400
+
+            cam_url = data.get("url", "").strip().upper()
+            cam_name = data.get("name", "").strip().upper()
+            stores = data.get("store") or data.get("stores")
+
+            if not cam_url and not cam_name:
+                return jsonify(msg="❌ 'url' or 'name' of the camera is required"), 400
+            if not stores:
+                return jsonify(msg="❌ 'store' or 'stores' is required"), 400
+
+            store_list = (
+                [stores.strip().upper()]
+                if isinstance(stores, str)
+                else [s.strip().upper() for s in stores if isinstance(s, str) and s.strip()]
+            )
+
+            if not store_list:
+                return jsonify(msg="❌ Invalid 'stores' list"), 400
+
+            cam_doc = None
+            if cam_url:
+                cam_doc = db.cameras.find_one({"url": cam_url})
+            elif cam_name:
+                matches = list(db.cameras.find({"name": cam_name}))
+                if len(matches) > 1:
+                    return jsonify(msg="❌ Multiple cameras found by name. Use 'url' instead."), 400
+                elif matches:
+                    cam_doc = matches[0]
+
+            if not cam_doc:
+                return jsonify(msg="❌ Camera not found"), 404
+
+            removed = []
+            not_linked = []
+
+            for store in store_list:
+                if store not in cam_doc.get("stores", []):
+                    not_linked.append(store)
+                    continue
+
+                db.cameras.update_one({"_id": cam_doc["_id"]}, {"$pull": {"stores": store}})
+
+                db.stores.update_one(
+                    {"name": store},
+                    {"$pull": {"cameras": {"url": cam_doc["url"]}}},
+                )
+                removed.append(store)
+
+            # Refresh cam_doc after update
+            cam_doc = db.cameras.find_one({"_id": cam_doc["_id"]})
+
+            msg_parts = []
+            if removed:
+                msg_parts.append(f"✅ Removed stores: {', '.join(removed)}")
+            if not_linked:
+                msg_parts.append(f"ℹ️ Not linked to camera: {', '.join(not_linked)}")
+
+            logger.info(f"Removed stores from camera {cam_doc['url']}: {removed}")
+            return jsonify(msg=". ".join(msg_parts), stores=cam_doc.get("stores", [])), 200
+        except Exception as e:
+            logger.critical(f"POST /cameras/remove_store failed: {e}")
+            return jsonify(msg="❌ Internal server error"), 500

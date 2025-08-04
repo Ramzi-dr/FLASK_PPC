@@ -20,18 +20,26 @@ RETRY_BASE_DELAY = 2  # seconds
 # Flag to track if notify_HS was called for the first time
 _first_time_called = True
 
-
-async def notify_HS(message, logger=None):
+async def notify_HS(message, logger=None, email=None):
     """
     Sends a notification via external service using Microsoft email account.
     Includes robust retry logic for connection errors.
     Waits 2 seconds only on the first call.
     Never raises unhandled errors if hs_notifier is unavailable.
+
+    Args:
+        message (str): The message body (HTML allowed).
+        logger (optional): Logger instance.
+        email (str, optional): Email to override default receiver.
     """
     global _first_time_called
     if _first_time_called:
         await asyncio.sleep(2)
         _first_time_called = False
+
+    receiver = (email if email else RECEIVER_EMAIL or "").strip().lower()
+
+
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -56,7 +64,7 @@ async def notify_HS(message, logger=None):
 
                 headers = {"Authorization": f"Bearer {token}"}
                 payload = {
-                    "receiver": RECEIVER_EMAIL,
+                    "receiver": receiver,
                     "title": TITLE,
                     "message": message,
                 }

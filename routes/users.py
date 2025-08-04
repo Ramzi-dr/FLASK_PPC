@@ -117,9 +117,9 @@ def init_user_routes(db):
     @users_bp.route("/users", methods=["GET"])
     @jwt_required()
     def get_users():
-        claims = get_jwt()
-        if claims.get("role") != "admin":
-            return jsonify(msg="❌ Admins only"), 403
+        # claims = get_jwt()
+        # if claims.get("role") != "admin":
+        #     return jsonify(msg="❌ Admins only"), 403
         try:
             users = []
             for doc in db.users.find({}, {"_id": 0, "password": 0}):
@@ -221,9 +221,9 @@ def init_user_routes(db):
     @users_bp.route("/users", methods=["DELETE"])
     @jwt_required()
     def delete_users():
-        claims = get_jwt()
-        if claims.get("role") != "admin":
-            return jsonify(msg="❌ Admins only"), 403
+        # claims = get_jwt()
+        # if claims.get("role") != "admin":
+        #     return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict):

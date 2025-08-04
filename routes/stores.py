@@ -594,3 +594,47 @@ def init_store_routes(db):
         except Exception as e:
             logger.critical(f"POST /stores/users failed: {e}")
             return jsonify(msg="❌ Internal server error"), 500
+
+    @stores_bp.route("/stores/by_user", methods=["POST"])
+    @jwt_required()
+    def get_stores_by_user():
+        try:
+            data = request.get_json()
+            if not data or "email" not in data:
+                return jsonify(msg="❌ 'email' is required in body"), 400
+
+            email = str(data["email"]).strip().upper()
+            if not email_regex.match(email):
+                return jsonify(msg="❌ Invalid email format"), 400
+
+            stores = []
+            for doc in db.stores.find({"users": email}):
+                doc.pop("_id", None)
+                ordered = OrderedDict()
+                ordered["name"] = doc.get("name", "")
+                ordered["clientID"] = doc.get("clientID", "")
+                ordered["address"] = doc.get("address", "")
+                ordered["users"] = doc.get("users", [])
+                ordered["open_time"] = doc.get("open_time", "00:00")
+                ordered["close_time"] = doc.get("close_time", "23:59")
+
+                converted_cameras = []
+                for cam in doc.get("cameras", []):
+                    if isinstance(cam, dict):
+                        cam = cam.copy()
+                        if "_id" in cam:
+                            cam["_id"] = str(cam["_id"])
+                        if "name" not in cam:
+                            cam["name"] = ""
+                        converted_cameras.append(cam)
+                    else:
+                        converted_cameras.append(cam)
+
+                ordered["cameras"] = converted_cameras
+                stores.append(ordered)
+
+            logger.info(f"Returned stores for user {email} ({len(stores)} found)")
+            return Response(json.dumps({"stores": stores}), mimetype="application/json")
+        except Exception as e:
+            logger.critical(f"POST /stores/by_user failed: {e}")
+            return jsonify(msg="❌ Internal server error"), 500

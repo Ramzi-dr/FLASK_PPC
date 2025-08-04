@@ -139,3 +139,86 @@ curl -X POST https://your-url/cameras \
 ```
 
 ---
+➕ POST /cameras/add_store — Link Store(s) to Camera
+Link one or more stores to a camera. Updates both the camera and store documents.
+
+📤 Request Body
+json
+{
+  "url": "cam-01",
+  "store": "StoreA"
+}
+or
+
+json
+{
+  "name": "Main Entrance",
+  "stores": ["StoreA", "StoreB"]
+}
+At least one of "url" or "name" is required.
+
+Use "store" for a single store, or "stores" for multiple.
+
+Store matching is by "name", case-insensitive.
+
+✅ Response
+json
+{
+  "msg": "✅ Linked stores: 2. ℹ️ Already linked: StoreX. ❌ Stores not found: StoreY"
+}
+Message summarizes actions: linked, already linked, and/or not found.
+
+❌ Errors
+400: Body cannot be empty, missing camera/store name, multiple cameras by name
+
+404: Camera not found
+
+500: Internal server error
+
+➖ POST /cameras/remove_store — Unlink Store(s) from Camera
+Remove one or more stores from a camera and update store docs.
+
+📤 Request Body
+json
+{
+  "url": "cam-01",
+  "store": "StoreA"
+}
+or
+
+json
+{
+  "name": "Main Entrance",
+  "stores": ["StoreA", "StoreB"]
+}
+Same structure as /add_store.
+
+✅ Response
+json
+{
+  "msg": "✅ Removed stores: StoreA, StoreB. ℹ️ Not linked to camera: StoreC"
+}
+Lists which stores were actually removed and which were not linked.
+
+❌ Errors
+400: Body cannot be empty, missing camera/store name, multiple cameras by name
+
+404: Camera not found
+
+500: Internal server error
+
+🧪 Curl Example
+Link a single store to a camera:
+
+bash
+curl -X POST https://your-url/cameras/add_store \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{ "url": "cam-01", "store": "StoreA" }'
+Remove stores from a camera by name:
+
+bash
+curl -X POST https://your-url/cameras/remove_store \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Main Entrance", "stores": ["StoreA", "StoreB"] }'

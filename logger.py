@@ -58,7 +58,6 @@ class DailyLogger:
 
     def warning(self, message):
         self.log("warning", message)
-        self._notify_async(message)
 
     def error(self, message):
         self.log("error", message)
