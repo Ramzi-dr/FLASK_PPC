@@ -1,7 +1,7 @@
 """ cameras.py """
 
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt
 import re
 from logger import logger
 from camera_data_manager import CameraDataManager
@@ -49,6 +49,9 @@ def init_camera_routes(db):
     @cameras_bp.route("/cameras", methods=["POST"])
     @jwt_required()
     def create_camera():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict) or data == {}:
@@ -125,6 +128,9 @@ def init_camera_routes(db):
     @cameras_bp.route("/cameras", methods=["PUT"])
     @jwt_required()
     def update_camera():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict):
@@ -201,6 +207,9 @@ def init_camera_routes(db):
     @cameras_bp.route("/cameras", methods=["DELETE"])
     @jwt_required()
     def delete_camera():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict):
@@ -229,7 +238,8 @@ def init_camera_routes(db):
                         400,
                     )
                 cam_doc = matches[0]
-
+            if not cam_doc:
+                return jsonify(msg="❌ Camera not found"), 404
             cam_id = cam_doc["_id"]
             cam_url = cam_doc["url"]
 
@@ -251,12 +261,15 @@ def init_camera_routes(db):
         except Exception as e:
             logger.critical(f"DELETE /cameras failed: {e}")
             return jsonify(msg="❌ Internal server error"), 500
-        
+
     # ---------- Store management ----------
 
     @cameras_bp.route("/cameras/add_store", methods=["POST"])
     @jwt_required()
     def add_store_to_camera():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict):
@@ -346,6 +359,9 @@ def init_camera_routes(db):
     @cameras_bp.route("/cameras/remove_store", methods=["POST"])
     @jwt_required()
     def remove_store_from_camera():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict):

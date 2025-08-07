@@ -1,7 +1,7 @@
 "stores.py"
 
 from flask import Blueprint, request, jsonify, Response
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt
 from collections import OrderedDict
 import re
 import json
@@ -56,6 +56,9 @@ def init_store_routes(db):
     @stores_bp.route("/stores", methods=["POST"])
     @jwt_required()
     def create_store():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict) or data == {}:
@@ -189,6 +192,9 @@ def init_store_routes(db):
     @stores_bp.route("/stores", methods=["PUT"])
     @jwt_required()
     def update_store():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict) or data == {}:
@@ -372,6 +378,9 @@ def init_store_routes(db):
     @stores_bp.route("/stores", methods=["DELETE"])
     @jwt_required()
     def delete_store():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict) or data == {}:
@@ -432,6 +441,9 @@ def init_store_routes(db):
     @stores_bp.route("/stores/users", methods=["DELETE"])
     @jwt_required()
     def remove_users_from_store():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict) or data == {}:
@@ -524,6 +536,9 @@ def init_store_routes(db):
     @stores_bp.route("/stores/users", methods=["POST"])
     @jwt_required()
     def add_users_to_store():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict) or data == {}:

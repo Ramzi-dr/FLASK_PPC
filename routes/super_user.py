@@ -1,7 +1,7 @@
 """ super_user.py """
 
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt
 import re
 import bcrypt
 from logger import logger  # ✅ import logger
@@ -26,6 +26,9 @@ def init_super_user_routes(db):
     @super_user_bp.route("/super_user/reset_password", methods=["PUT"])
     @jwt_required()
     def reset_user_password():
+        claims = get_jwt()
+        if claims.get("role") != "admin":
+            return jsonify(msg="❌ Admins only"), 403
         try:
             data = request.get_json()
             if not data or not isinstance(data, dict) or data == {}:

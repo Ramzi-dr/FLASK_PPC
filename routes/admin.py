@@ -49,7 +49,9 @@ def basic_auth_required(fn):
                     401,
                     {"WWW-Authenticate": 'Basic realm="Login required"'},
                 )
-
+            if not env_collection:
+                logger.critical("❌ Admin environment collection not initialized")
+                return jsonify(msg="❌ Internal server error"), 500
             user_doc = env_collection.find_one({"key": "FLASK_USER"})
             pw_doc = env_collection.find_one({"key": "FLASK_PASSWORD"})
 
