@@ -140,19 +140,22 @@ def set_token_expiry():
             current_app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(
                 seconds=access_seconds
             )
-            env_collection.update_one(
-                {"key": "JWT_ACCESS_TOKEN_EXPIRES_SECONDS"},
-                {"$set": {"value": str(access_seconds)}},
-            )
+            if env_collection is not None:
+
+                env_collection.update_one(
+                    {"key": "JWT_ACCESS_TOKEN_EXPIRES_SECONDS"},
+                    {"$set": {"value": str(access_seconds)}},
+                )
 
         if refresh_seconds is not None:
             current_app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(
                 seconds=refresh_seconds
             )
-            env_collection.update_one(
-                {"key": "JWT_REFRESH_TOKEN_EXPIRES_SECONDS"},
-                {"$set": {"value": str(refresh_seconds)}},
-            )
+            if env_collection is not None:
+                env_collection.update_one(
+                    {"key": "JWT_REFRESH_TOKEN_EXPIRES_SECONDS"},
+                    {"$set": {"value": str(refresh_seconds)}},
+                )
 
         now = datetime.now(tz=timezone.utc).timestamp()
         current_app.config["TOKEN_ISSUED_AFTER"] = now
